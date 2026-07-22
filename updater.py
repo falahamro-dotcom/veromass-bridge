@@ -102,6 +102,7 @@ def apply_update_if_available():
             return
 
         print(f"Updating VeroMass Bridge to {tag}...")
+        sys.stdout.flush()  # see the flush before execv below — applies here too
         resp = requests.get(zipball_url, timeout=30)
         resp.raise_for_status()
 
@@ -128,6 +129,11 @@ def apply_update_if_available():
                         out.write(src.read())
 
         print(f"Updated to {tag} — restarting...")
+        sys.stdout.flush()  # execv wipes this process's memory (buffered
+        sys.stderr.flush()  # output included) before it's written — must
+                             # flush explicitly or these messages vanish
+                             # when stdout is piped/redirected (confirmed
+                             # live: they were silently lost without this).
         os.execv(sys.executable, [sys.executable] + sys.argv)
     except Exception as e:
         print(f"Update check failed ({e}) — continuing with the current version.")
