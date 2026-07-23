@@ -74,7 +74,7 @@ def spawn_background_watcher():
     )
 
 
-def launch_aligner(workbench_name=None, job_name=None, workbench_id=None, job_id=None):
+def launch_aligner(workbench_name=None, job_name=None, workbench_id=None, job_id=None, output_dir=None):
     """Detached launch of the real aligner GUI. Uses pythonw.exe — a real,
     windowed-subsystem Python build meant exactly for this: it has no
     console attached, but Tkinter's own GUI window still renders normally,
@@ -100,6 +100,8 @@ def launch_aligner(workbench_name=None, job_name=None, workbench_id=None, job_id
         env["VEROMASS_WORKBENCH_ID"] = workbench_id
     if job_id:
         env["VEROMASS_JOB_ID"] = job_id
+    if output_dir:
+        env["VEROMASS_OUTPUT_DIR"] = output_dir
 
     subprocess.Popen(
         [_pythonw(), ALIGNER_PY],

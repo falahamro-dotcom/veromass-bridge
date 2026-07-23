@@ -167,10 +167,23 @@ def main():
         except Exception as e:
             print(f"Could not fetch workbench/job name for display (non-fatal): {e}")
 
+        # Pre-fill the aligner's output folder with a per-job subfolder of
+        # the Bridge's own watched folder (watch.py's DEFAULT_DIR) so the
+        # scientist never has to know/type that path for "Process locally"
+        # to work — the folder-requirement question a user asked about
+        # directly. A per-job subfolder (not the watched folder's own top
+        # level) uses watch.py's primary, more-robust detection path rather
+        # than its top-level fallback, and can't collide with another
+        # job's run. Manual (`--job`/`--xlsx`) runs are unaffected — this
+        # only applies to the scheme-launch flow.
+        import watch
+        output_dir = os.path.join(watch.DEFAULT_DIR, job_id)
+
         import launcher
         launcher.launch_aligner(
             workbench_name=workbench_name, job_name=job_name,
             workbench_id=workbench_id, job_id=job_id,
+            output_dir=output_dir,
         )
         print("Launched the VeroMass Aligner.")
 
