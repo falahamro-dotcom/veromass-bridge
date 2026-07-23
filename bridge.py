@@ -28,12 +28,12 @@ new code BEFORE doing anything else (updater.py) — relaunching is what
 performs an update, never a silent hot-swap of an already-running process.
 
 --workbench is optional in the manual path (never sent to the API — the
-commit call only needs --job) but now matters more than a label: when given,
-process_one() opens the browser straight to
-{APP_BASE}/workbench/{workbench_id}/job/{job_id}
-(moleculeid-web/App.jsx + Workbench.jsx's useParams auto-select) instead of
-the bare job list. --watch always has it, since watch.py gets the
-workbench_id for free out of jobs.match_one_pending_job() or the hint.
+commit call only needs --job) and is now purely informational: Workbench.jsx
+(moleculeid-web) polls its own already-open tab and auto-refreshes once a
+commit lands, so process_one() no longer opens a browser tab itself — an
+earlier version did, which meant a redundant second tab/window popped up on
+every commit even when app.veromass.com was already open and about to show
+the same result on its own.
 """
 
 import argparse
@@ -41,14 +41,11 @@ import os
 import sys
 import urllib.parse
 import uuid
-import webbrowser
 
 import auth
 import api_client
 import jobs
 import mapping
-
-APP_BASE = os.environ.get("VEROMASS_APP_BASE", "https://app.veromass.com")
 
 
 def _is_uuid(s):
@@ -77,9 +74,20 @@ def parse_scheme_url(url):
 
 
 def process_one(job_id, mode, xlsx_path, access_token, workbench_id=None):
-    """Map + commit one finished aligner workbook against one Job, then open
-    the browser to the result. Shared by both the manual --job path and the
-    watch loop (watch.py) — the commit logic must only ever exist once."""
+    """Map + commit one finished aligner workbook against one Job. Shared by
+    both the manual --job path and the watch loop (watch.py) — the commit
+    logic must only ever exist once.
+
+    Does NOT open a browser tab on completion. For the "Process locally"
+    flow, the scientist's own click on that link is what opened
+    app.veromass.com in the first place — Workbench.jsx now polls and
+    auto-refreshes that already-open tab once the commit lands (see
+    moleculeid-web), and "Remind me when done" covers the case where
+    they've since switched away from it. An earlier version of this
+    function called webbrowser.open() here unconditionally, which meant a
+    NEW tab/window popped up on every single commit on top of the one
+    already open and about to show the same result on its own — removed as
+    redundant, not as a regression."""
     print(f"Mapping {xlsx_path} for a {mode} job...")
     mode_body = mapping.build_commit_payload(xlsx_path, mode)
     n = len(mode_body.get("features") or mode_body.get("feature_matrix") or [])
@@ -89,17 +97,6 @@ def process_one(job_id, mode, xlsx_path, access_token, workbench_id=None):
     print(f"Committing job {job_id} (package_uuid={package_uuid})...")
     result = api_client.commit_job(job_id, package_uuid, mode_body, access_token)
     print(f"  -> status: {result.get('status')}")
-
-    if workbench_id:
-        url = f"{APP_BASE}/workbench/{workbench_id}/job/{job_id}"
-        print(f"Opening {url}")
-    else:
-        # Only reachable from the manual --job path without --workbench —
-        # the watch path always has workbench_id from jobs.py's match.
-        url = f"{APP_BASE}/workbench"
-        print(f"Opening {url} (no --workbench given — re-select job "
-              f"'{job_id}' to see the result)")
-    webbrowser.open(url)
     return result
 
 

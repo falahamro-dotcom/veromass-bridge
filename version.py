@@ -2,4 +2,4 @@
 this against GitHub Releases; bump this (and tag+release to match) as
 part of shipping any update."""
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
