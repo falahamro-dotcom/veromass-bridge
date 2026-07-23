@@ -1,2 +1,10 @@
 __pycache__/
 *.pyc
+
+# PyInstaller build artifacts and the venv used to build them — these are
+# rebuilt from source, not checked in (built exes get attached to GitHub
+# Releases instead, same convention as the source-only repo).
+.build-venv/
+build/
+dist/
+*.spec

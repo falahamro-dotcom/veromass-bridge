@@ -133,6 +133,9 @@ def main():
     parser.add_argument("--scheme-launch", default=None, metavar="URL",
                          help="internal — invoked by the registered veromass:// "
                               "protocol handler (register_scheme.py), not typed by hand")
+    parser.add_argument("--register-scheme", action="store_true",
+                         help="one-time setup: register the veromass:// URI scheme for "
+                              "this Windows user, then exit. Safe to re-run.")
     parser.add_argument("--workbench", required=False, default=None,
                          help="workbench_id from the browser (optional — only used to "
                               "annotate the closing message, never sent to the API)")
@@ -140,6 +143,11 @@ def main():
     parser.add_argument("--mode", required=False, choices=["targeted", "untargeted"])
     parser.add_argument("--xlsx", required=False, help="path to aligned_features.xlsx")
     args = parser.parse_args()
+
+    if args.register_scheme:
+        import register_scheme
+        register_scheme.register()
+        return
 
     if args.scheme_launch:
         try:
