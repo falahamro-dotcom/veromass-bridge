@@ -38,6 +38,7 @@ workbench_id for free out of jobs.match_one_pending_job() or the hint.
 
 import argparse
 import os
+import sys
 import urllib.parse
 import uuid
 import webbrowser
@@ -102,7 +103,27 @@ def process_one(job_id, mode, xlsx_path, access_token, workbench_id=None):
     return result
 
 
+def _ensure_stdio():
+    """The registered veromass:// protocol handler (register_scheme.py) now
+    invokes pythonw.exe so clicking "Process locally" doesn't flash a
+    console window — but under pythonw.exe, sys.stdout/stderr are None, and
+    every print() in this file would crash with AttributeError. Redirect to
+    a log file in that case, same convention as launcher.py's watch.log. A
+    normal console invocation (python.exe — manual --job/--watch use) is
+    untouched, since sys.stdout is a real stream there."""
+    if sys.stdout is None or sys.stderr is None:
+        log_dir = os.path.join(
+            os.environ.get("LOCALAPPDATA", os.path.expanduser("~")), "VeroMassBridge"
+        )
+        os.makedirs(log_dir, exist_ok=True)
+        log = open(os.path.join(log_dir, "scheme_launch.log"), "a", buffering=1)
+        sys.stdout = log
+        sys.stderr = log
+
+
 def main():
+    _ensure_stdio()
+
     import updater
     updater.apply_update_if_available()  # relaunch-to-update: see updater.py
 
@@ -133,8 +154,24 @@ def main():
         print(f"Job {job_id} pre-stamped — the next finished aligner run "
               f"will be matched to it automatically.")
 
+        # Best-effort: fetch the real names the scientist sees in the
+        # browser so the aligner GUI can show "linked to <name>" instead of
+        # just launching blind. Never blocks the launch on failure (a
+        # transient auth/network hiccup here shouldn't stop the aligner
+        # from opening) — falls back to no name shown, IDs still work.
+        workbench_name = job_name = None
+        try:
+            access_token = auth.get_access_token()
+            workbench_name = api_client.get_workbench(workbench_id, access_token).get("name")
+            job_name = api_client.get_job(job_id, access_token).get("name")
+        except Exception as e:
+            print(f"Could not fetch workbench/job name for display (non-fatal): {e}")
+
         import launcher
-        launcher.launch_aligner()
+        launcher.launch_aligner(
+            workbench_name=workbench_name, job_name=job_name,
+            workbench_id=workbench_id, job_id=job_id,
+        )
         print("Launched the VeroMass Aligner.")
 
         if launcher.is_watcher_alive():

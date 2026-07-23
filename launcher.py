@@ -74,7 +74,7 @@ def spawn_background_watcher():
     )
 
 
-def launch_aligner():
+def launch_aligner(workbench_name=None, job_name=None, workbench_id=None, job_id=None):
     """Detached launch of the real aligner GUI. Uses pythonw.exe — a real,
     windowed-subsystem Python build meant exactly for this: it has no
     console attached, but Tkinter's own GUI window still renders normally,
@@ -82,10 +82,29 @@ def launch_aligner():
     earlier version used python.exe (console-attached) here on the mistaken
     assumption pythonw.exe wouldn't reliably show the GUI — that flashed a
     console window on every "Process locally" click. Confirmed on this real
-    machine that pythonw.exe exists alongside python.exe before switching."""
+    machine that pythonw.exe exists alongside python.exe before switching.
+
+    workbench_name/job_name/*_id (all optional): the exact name/id the
+    scientist already sees in app.veromass.com for the job this launch is
+    pre-stamped for — passed through env vars so VeroMass_Aligner.py can
+    show "linked to" in its own title/header, making the desktop run
+    visibly the same job the browser is waiting on, not just silently
+    linked by a UUID underneath (the commit path already guarantees that
+    part via the pending-hint match in jobs.py/watch.py)."""
+    env = dict(os.environ)
+    if workbench_name:
+        env["VEROMASS_WORKBENCH_NAME"] = workbench_name
+    if job_name:
+        env["VEROMASS_JOB_NAME"] = job_name
+    if workbench_id:
+        env["VEROMASS_WORKBENCH_ID"] = workbench_id
+    if job_id:
+        env["VEROMASS_JOB_ID"] = job_id
+
     subprocess.Popen(
         [_pythonw(), ALIGNER_PY],
         cwd=ALIGNER_DIR,
+        env=env,
         creationflags=subprocess.DETACHED_PROCESS if sys.platform == "win32" else 0,
         close_fds=True,
     )
