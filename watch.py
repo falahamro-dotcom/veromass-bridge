@@ -180,7 +180,22 @@ def run(watch_dir, get_access_token, process_one):
 
         if time.time() - last_update_check > UPDATE_CHECK_SECONDS:
             last_update_check = time.time()
-            updater.check_for_update_notice()
+            # Was updater.check_for_update_notice() — print-only, meant for
+            # a human to read "close and relaunch to update" and act on it.
+            # Now that launcher.py starts this loop windowless (pythonw.exe,
+            # no console — see the console-flash fix), that notice only
+            # ever reached watch.log, which nobody watches; a background
+            # watcher would silently run stale code forever, exactly what
+            # happened live: log_server.py/name-linking/output-dir-autofill
+            # all shipped in later releases while an already-running
+            # watcher from before those releases kept serving old code,
+            # since nothing ever told IT to restart. apply_update_if_available()
+            # actually applies + os.execv-restarts the process when a newer
+            # release exists — called here, right after touching the
+            # heartbeat and before _find_ready_runs() below, i.e. only at an
+            # idle poll boundary with no run in progress, so this can never
+            # interrupt an in-progress commit.
+            updater.apply_update_if_available()
 
         try:
             access_token = get_access_token(force_refresh=force_refresh)

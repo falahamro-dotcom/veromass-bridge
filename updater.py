@@ -1,10 +1,19 @@
 """
-Claude-Code-style auto-update: never hot-swap a running process. A
-long-running `--watch` loop just prints a one-time notice when a newer
-release exists ("close and relaunch to update") and keeps running on the
-current version. The actual update — download, extract, restart — only
-happens at the START of the next fresh launch, before any real work
-begins, via apply_update_if_available() at the top of bridge.py's main().
+Claude-Code-style auto-update: never hot-swap a running process — always
+apply + restart via os.execv, never a live in-place patch. Two call sites,
+both idle-safe:
+  - bridge.py's main(), the very first thing any invocation does, before
+    any real work begins.
+  - watch.py's long-running loop, once per UPDATE_CHECK_SECONDS, called
+    right after touching the heartbeat and before checking for finished
+    runs — i.e. only at an idle poll boundary, never mid-commit.
+An earlier version of the watch-loop call only printed a "close and
+relaunch to update" notice instead of actually applying it, on the
+assumption a human would see and act on it — broken once launcher.py
+started running this loop windowless (pythonw.exe, no console): the
+notice went to watch.log, which nobody watches, so an already-running
+background watcher would silently serve stale code indefinitely. Both
+call sites now go through the same apply_update_if_available().
 
 Hosting: GitHub Releases on a dedicated repo (this one). All persistent
 Bridge state (token.dat, hint files, heartbeat, logs) lives under
@@ -27,8 +36,6 @@ REPO = os.environ.get("VEROMASS_BRIDGE_REPO", "falahamro-dotcom/veromass-bridge"
 BRIDGE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 _TAG_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
-
-_notice_shown = False  # module-level: print the relaunch notice once per process
 
 
 def _parse_tag(tag):
@@ -69,23 +76,6 @@ def get_latest_release():
         return tag, zipball_url
     except Exception:
         return None
-
-
-def check_for_update_notice():
-    """Called periodically from watch.py's long-running loop. Prints the
-    relaunch notice at most once per process — never repeats every poll."""
-    global _notice_shown
-    if _notice_shown:
-        return
-    latest = get_latest_release()
-    if latest is None:
-        return
-    tag, _ = latest
-    if is_newer(tag):
-        _notice_shown = True
-        print(f"\n  A new version of VeroMass Bridge is available ({tag}, "
-              f"currently running {version.__version__}). Close this and "
-              f"relaunch to update.\n")
 
 
 def apply_update_if_available():
