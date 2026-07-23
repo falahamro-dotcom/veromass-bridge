@@ -34,6 +34,7 @@ import shutil
 import time
 
 import jobs
+import log_server
 import updater
 
 POLL_SECONDS = 2
@@ -158,6 +159,15 @@ def run(watch_dir, get_access_token, process_one):
     watch_dir = watch_dir or DEFAULT_DIR
     os.makedirs(watch_dir, exist_ok=True)
     print(f"Watching {watch_dir} for finished aligner runs (Ctrl+C to stop)...")
+
+    # Best-effort local log server so app.veromass.com can show the
+    # aligner's live log for a running job — never allowed to affect the
+    # actual watch loop below if it fails to start for any reason.
+    try:
+        log_server.start_in_background(watch_dir)
+    except Exception as e:
+        print(f"  Note: local log server did not start ({e}) — live log "
+              f"tailing in the browser won't be available this run.")
 
     # Set whenever an API call fails this iteration — forces a real refresh
     # attempt next time instead of trusting the same (possibly wrong) local
