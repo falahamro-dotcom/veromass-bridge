@@ -75,11 +75,16 @@ def spawn_background_watcher():
 
 
 def launch_aligner():
-    """Detached launch of the real aligner GUI — keeps its own visible
-    window (Tkinter needs a real console-capable process to reliably show
-    one, so this uses python.exe, not pythonw.exe, unlike the watcher)."""
+    """Detached launch of the real aligner GUI. Uses pythonw.exe — a real,
+    windowed-subsystem Python build meant exactly for this: it has no
+    console attached, but Tkinter's own GUI window still renders normally,
+    since Tkinter draws its own window rather than needing a console. The
+    earlier version used python.exe (console-attached) here on the mistaken
+    assumption pythonw.exe wouldn't reliably show the GUI — that flashed a
+    console window on every "Process locally" click. Confirmed on this real
+    machine that pythonw.exe exists alongside python.exe before switching."""
     subprocess.Popen(
-        [sys.executable, ALIGNER_PY],
+        [_pythonw(), ALIGNER_PY],
         cwd=ALIGNER_DIR,
         creationflags=subprocess.DETACHED_PROCESS if sys.platform == "win32" else 0,
         close_fds=True,
