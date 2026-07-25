@@ -3,12 +3,12 @@
 # .build-venv\Scripts\pip install pyinstaller requests openpyxl numpy
 # scipy pandas) and compiles the Inno Setup installer on top of them.
 #
-# Deliberately NOT using the system default Python — as of 2026-07-23
+# Deliberately NOT using the system default Python -- as of 2026-07-23
 # this machine's default is 3.14, which PyInstaller 6.21 does not yet
 # fully support (a real build failure, not a hypothetical: a frozen
 # --onedir bridge build corrupted its own child-process bootstrap in a
 # way traced back to the 3.14 environment, evidenced by "missing module
-# collections.abc" — a stdlib module that always exists — showing up in
+# collections.abc" -- a stdlib module that always exists -- showing up in
 # PyInstaller's own build warnings). Always build with the pinned venv.
 
 $ErrorActionPreference = "Stop"
@@ -18,7 +18,7 @@ $AlignerDir = Join-Path (Split-Path -Parent $BridgeDir) "veromass-aligner"
 $Venv = Join-Path $BridgeDir ".build-venv"
 
 if (-not (Test-Path $Venv)) {
-    throw "Build venv not found at $Venv — create it first: py -3.12 -m venv `"$Venv`"; & `"$Venv\Scripts\pip`" install pyinstaller requests openpyxl numpy scipy pandas openpyxl"
+    throw "Build venv not found at $Venv -- create it first: py -3.12 -m venv `"$Venv`"; & `"$Venv\Scripts\pip`" install pyinstaller requests openpyxl numpy scipy pandas openpyxl"
 }
 
 & "$Venv\Scripts\Activate.ps1"
@@ -42,4 +42,4 @@ if (-not (Test-Path $Iscc)) {
 }
 & $Iscc "$PSScriptRoot\VeroMassSetup.iss"
 
-Write-Host "Done — installer in $PSScriptRoot\output\"
+Write-Host "Done -- installer in $PSScriptRoot\output\"
