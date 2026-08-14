@@ -28,7 +28,7 @@
 ; builds both frozen exes fresh before compiling this script.)
 
 #define MyAppName "VeroMass Desktop Bridge"
-#define MyAppVersion "0.3.3"
+#define MyAppVersion "0.3.4"
 #define MyAppPublisher "VeroMass"
 #define MyAppURL "https://app.veromass.com"
 
