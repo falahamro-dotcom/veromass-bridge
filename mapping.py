@@ -64,11 +64,77 @@ def build_untargeted_feature_matrix(xlsx_path):
     return matrix
 
 
+def build_untargeted_feature_meta(xlsx_path):
+    """Read the Features sheet -> {feature: {mz, rt}} — this is what makes
+    POST /api/jobs/{id}/annotate possible server-side (see
+    workbench_routes.py's JobCommit.feature_meta docstring): without it, an
+    untargeted job's "compounds" are just row labels with no coordinates to
+    match against the library. Feature ids here (Feature_000001, ...) are the
+    SAME ones write_feature_table used across Features/Peaks/Intensities, so
+    they line up with build_untargeted_feature_matrix's keys directly."""
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    ws = wb["Features"]
+    meta = {}
+    for i, row in enumerate(_read_sheet_as_dicts(ws), 1):
+        feature_id = f"Feature_{i:06d}"
+        mz, rt = row.get("m.z"), row.get("RT")
+        if mz is None or rt is None:
+            continue
+        meta[feature_id] = {"mz": float(mz), "rt": float(rt)}
+    return meta
+
+
+def build_chromatograms(xlsx_path):
+    """Read the optional TIC / BPI / RT_Correction sheets (absent on older
+    aligner output, or on an all-MGF run with no scan-level data — see
+    VeroMass_Aligner.py's write_feature_table docstring) into the per-sample
+    trace shape Workbench's chart components expect:
+      {"tic": [{"sample","x","y"}, ...], "bpi": [...],
+       "rt_correction": [{"sample","rtRaw","rtDeviation"}, ...]}
+    Returns an empty dict (not None) when none of the sheets are present, so
+    callers can always do `commit_body.get("chromatograms") or {}` safely."""
+    wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
+    result = {}
+
+    for sheet, key, y_field in (("TIC", "tic", "intensity"), ("BPI", "bpi", "intensity")):
+        if sheet not in wb.sheetnames:
+            continue
+        by_sample = {}
+        for row in _read_sheet_as_dicts(wb[sheet]):
+            s = row.get("sample")
+            if s is None or row.get("rt_min") is None:
+                continue
+            by_sample.setdefault(s, {"x": [], "y": []})
+            by_sample[s]["x"].append(float(row["rt_min"]))
+            by_sample[s]["y"].append(float(row[y_field] or 0.0))
+        result[key] = [{"sample": s, **traces} for s, traces in by_sample.items()]
+
+    if "RT_Correction" in wb.sheetnames:
+        by_sample = {}
+        for row in _read_sheet_as_dicts(wb["RT_Correction"]):
+            s = row.get("sample")
+            if s is None or row.get("rt_raw_min") is None:
+                continue
+            by_sample.setdefault(s, {"rtRaw": [], "rtDeviation": []})
+            by_sample[s]["rtRaw"].append(float(row["rt_raw_min"]))
+            by_sample[s]["rtDeviation"].append(float(row.get("rt_deviation_min") or 0.0))
+        result["rt_correction"] = [{"sample": s, **curve} for s, curve in by_sample.items()]
+
+    return result
+
+
 def build_commit_payload(xlsx_path, mode):
     """mode: "targeted" or "untargeted" -> the mode-specific body fields
     (package_uuid is added by the caller, not here)."""
     if mode == "targeted":
         return {"features": build_targeted_features(xlsx_path)}
     if mode == "untargeted":
-        return {"feature_matrix": build_untargeted_feature_matrix(xlsx_path)}
+        payload = {
+            "feature_matrix": build_untargeted_feature_matrix(xlsx_path),
+            "feature_meta": build_untargeted_feature_meta(xlsx_path),
+        }
+        chromatograms = build_chromatograms(xlsx_path)
+        if chromatograms:
+            payload["chromatograms"] = chromatograms
+        return payload
     raise ValueError(f"Unknown job mode: {mode!r}")
