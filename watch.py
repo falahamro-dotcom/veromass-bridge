@@ -160,14 +160,34 @@ def run(watch_dir, get_access_token, process_one):
     os.makedirs(watch_dir, exist_ok=True)
     print(f"Watching {watch_dir} for finished aligner runs (Ctrl+C to stop)...")
 
-    # Best-effort local log server so app.veromass.com can show the
-    # aligner's live log for a running job — never allowed to affect the
-    # actual watch loop below if it fails to start for any reason.
+    # Self-heal the veromass:// registration on every watcher start, not
+    # just at install time. The installer's [Run] step registers it once;
+    # if that step ever failed/was skipped, or a reinstall/move left a
+    # stale registry entry pointing at a deleted exe, "Process locally"
+    # would silently do nothing forever with no way to recover short of
+    # manually running --register-scheme. This is cheap and idempotent
+    # (register_scheme.py's own docstring), so just always re-run it.
+    # Never allowed to affect the actual watch loop if it fails.
+    try:
+        import register_scheme
+        register_scheme.register()
+    except Exception as e:
+        print(f"  Note: could not (re-)register veromass:// this run ({e}) — "
+              f"the HTTP-based POST /launch path below is unaffected either way.")
+
+    # Best-effort local control server: app.veromass.com uses GET /health to
+    # detect a running Bridge before the scientist clicks anything, and
+    # POST /launch as the primary (reliable, observable) replacement for the
+    # old veromass:// link — see log_server.py's module docstring. Also
+    # still serves GET /log/<job_id> for live log tailing. Never allowed to
+    # affect the actual watch loop below if it fails to start for any reason.
     try:
         log_server.start_in_background(watch_dir)
     except Exception as e:
-        print(f"  Note: local log server did not start ({e}) — live log "
-              f"tailing in the browser won't be available this run.")
+        print(f"  Note: local control server did not start ({e}) — live log "
+              f"tailing and the HTTP-based Process-locally path won't be "
+              f"available this run (the veromass:// link still works if "
+              f"registered).")
 
     # Set whenever an API call fails this iteration — forces a real refresh
     # attempt next time instead of trusting the same (possibly wrong) local

@@ -10,6 +10,18 @@
 ; customer never has to open a terminal — that's the whole point of this
 ; installer existing at all.
 ;
+; Also starts a background "--watch" instance immediately after install AND
+; registers a per-user Startup-folder entry so it auto-starts on every
+; login from then on ({userstartup} — HKCU-equivalent, no admin needed,
+; same no-admin philosophy as everything else here). Before this, Bridge
+; only ever ran the FIRST time a scientist actually clicked "Process
+; locally" — meaning GET /health (app.veromass.com's pre-flight check for
+; "is Bridge installed") had no way to say yes on a fresh install that had
+; never been used yet, since nothing was listening on 127.0.0.1:58765 until
+; then. Keeping a watcher running continuously closes that gap for real,
+; the same way Dropbox/similar background-sync tools stay running rather
+; than only starting the moment they're needed.
+;
 ; Build with: ISCC VeroMassSetup.iss
 ; (expects ..\dist\VeroMass_Bridge\ and the aligner repo's ..\..\veromass-aligner\dist\VeroMass_Aligner.exe
 ; to already exist — see build_installer.ps1 in this same folder, which
@@ -44,12 +56,24 @@ WizardStyle=modern
 Source: "..\dist\VeroMass_Bridge\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 Source: "..\..\veromass-aligner\dist\VeroMass_Aligner.exe"; DestDir: "{app}"; Flags: ignoreversion
 
+[Icons]
+; Per-user Startup-folder entry so the Bridge watcher auto-starts on every
+; login from now on — {userstartup} is a normal shell:startup shortcut,
+; no admin/Task Scheduler needed. --windowed build has no console for any
+; argument combination, so this is invisible either way.
+Name: "{userstartup}\VeroMass Bridge"; Filename: "{app}\VeroMass_Bridge.exe"; Parameters: "--watch"; IconFilename: "{app}\VeroMass_Bridge.exe"
+
 [Run]
 ; Registers the veromass:// URI scheme for THIS Windows user
 ; (HKEY_CURRENT_USER — see register_scheme.py). Runs hidden and waits for
 ; it to finish before the installer's own "Finished" page appears, so a
 ; customer never sees a flash of anything.
 Filename: "{app}\VeroMass_Bridge.exe"; Parameters: "--register-scheme"; Flags: runhidden waituntilterminated
+; Starts the background watcher right away, not just registers it for NEXT
+; login — "nowait" so the installer's Finished page doesn't sit waiting on
+; a process that runs forever by design. Unconditional (no "postinstall"
+; checkbox flag) — this should always happen, not be an optional launch.
+Filename: "{app}\VeroMass_Bridge.exe"; Parameters: "--watch"; Flags: runhidden nowait
 
 [UninstallRun]
 ; Best-effort cleanup — if this fails for any reason (e.g. the key was

@@ -44,7 +44,6 @@ import uuid
 
 import auth
 import api_client
-import jobs
 import mapping
 
 
@@ -155,49 +154,19 @@ def main():
         except ValueError as e:
             print(f"Ignoring malformed veromass:// launch: {e}")
             return
-        jobs.write_pending_hint(workbench_id, job_id)
+        # Shared with log_server.py's POST /launch — see job_launch.py's
+        # module docstring for why this is now the ONE implementation
+        # rather than duplicated per invocation path.
+        import job_launch
+        result = job_launch.launch_job(workbench_id, job_id)
         print(f"Job {job_id} pre-stamped — the next finished aligner run "
               f"will be matched to it automatically.")
-
-        # Best-effort: fetch the real names the scientist sees in the
-        # browser so the aligner GUI can show "linked to <name>" instead of
-        # just launching blind. Never blocks the launch on failure (a
-        # transient auth/network hiccup here shouldn't stop the aligner
-        # from opening) — falls back to no name shown, IDs still work.
-        workbench_name = job_name = None
-        try:
-            access_token = auth.get_access_token()
-            workbench_name = api_client.get_workbench(workbench_id, access_token).get("name")
-            job_name = api_client.get_job(job_id, access_token).get("name")
-        except Exception as e:
-            print(f"Could not fetch workbench/job name for display (non-fatal): {e}")
-
-        # Pre-fill the aligner's output folder with a per-job subfolder of
-        # the Bridge's own watched folder (watch.py's DEFAULT_DIR) so the
-        # scientist never has to know/type that path for "Process locally"
-        # to work — the folder-requirement question a user asked about
-        # directly. A per-job subfolder (not the watched folder's own top
-        # level) uses watch.py's primary, more-robust detection path rather
-        # than its top-level fallback, and can't collide with another
-        # job's run. Manual (`--job`/`--xlsx`) runs are unaffected — this
-        # only applies to the scheme-launch flow.
-        import watch
-        output_dir = os.path.join(watch.DEFAULT_DIR, job_id)
-
-        import launcher
-        launcher.launch_aligner(
-            workbench_name=workbench_name, job_name=job_name,
-            workbench_id=workbench_id, job_id=job_id,
-            output_dir=output_dir,
-        )
         print("Launched the VeroMass Aligner.")
-
-        if launcher.is_watcher_alive():
-            print("A Bridge watcher is already running in the background.")
+        if result["watcher_started"]:
+            import launcher
+            print(f"Started a Bridge watcher in the background (log: {launcher.WATCH_LOG_PATH}).")
         else:
-            launcher.spawn_background_watcher()
-            print("Started a Bridge watcher in the background "
-                  f"(log: {launcher.WATCH_LOG_PATH}).")
+            print("A Bridge watcher is already running in the background.")
         return
 
     if args.watch:
