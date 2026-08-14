@@ -118,6 +118,25 @@ def _ensure_stdio():
 
 
 def main():
+    # --build-payload is checked before anything else (stdio guard, the
+    # self-updater, argparse's other flags) — it's a pure, offline, no-auth
+    # utility (mapping.build_commit_payload is documented as "no
+    # network/auth here" in mapping.py itself) that VeroMass Desktop's
+    # embedded Aligner flow calls synchronously and wants fast and
+    # deterministic. Skipping the self-updater here specifically avoids a
+    # repeat of a real issue hit during testing: --register-scheme
+    # triggered an unexpected relaunch-to-update mid-flow, which is
+    # surprising and undesirable for a request the caller expects to be a
+    # quick, synchronous, no-side-effects JSON-in-JSON-out call.
+    if "--build-payload" in sys.argv:
+        bp = argparse.ArgumentParser()
+        bp.add_argument("--build-payload", nargs=2, metavar=("XLSX", "MODE"))
+        bp_args, _ = bp.parse_known_args()
+        xlsx_path, mode = bp_args.build_payload
+        import json
+        print(json.dumps(mapping.build_commit_payload(xlsx_path, mode)))
+        return
+
     _ensure_stdio()
 
     import updater
