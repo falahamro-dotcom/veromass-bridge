@@ -10,6 +10,9 @@ Pure functions, no network/auth here — easy to unit-test against a real
 workbook produced by veromass-aligner.
 """
 
+import os
+import re
+
 import openpyxl
 
 
@@ -17,6 +20,56 @@ def _read_sheet_as_dicts(ws):
     rows = ws.iter_rows(values_only=True)
     header = next(rows)
     return [dict(zip(header, row)) for row in rows]
+
+
+_TOTAL_FILES_RE = re.compile(r"Total MS files:\s*(\d+)")
+
+
+def _expected_sample_count(xlsx_path):
+    """Read the aligner's own `alignment_log.txt` (written alongside
+    aligned_features.xlsx in the same output folder) for its "Total MS
+    files: N" line — an INDEPENDENT count of how many samples this run
+    actually processed, logged at the very start of the run, before any
+    grouping/correspondence/Excel-writing step could lose one. Returns None
+    (not an error) when the log is missing or the line can't be found —
+    e.g. an older aligner output, or the log was moved/deleted — since the
+    whole point is a sanity check on data we ALREADY have, not a new hard
+    requirement that makes otherwise-valid workbooks unusable."""
+    log_path = os.path.join(os.path.dirname(xlsx_path), "alignment_log.txt")
+    if not os.path.isfile(log_path):
+        return None
+    try:
+        with open(log_path, "r", encoding="utf-8", errors="ignore") as fh:
+            text = fh.read()
+    except OSError:
+        return None
+    m = _TOTAL_FILES_RE.search(text)
+    return int(m.group(1)) if m else None
+
+
+def _check_sample_count(xlsx_path, feature_matrix):
+    """Cross-validate the feature_matrix this run is about to commit against
+    the aligner's own independently-logged file count. Found live: a job
+    committed with one fewer sample than the aligner actually processed,
+    root-caused to a stale output folder from a prior run (fixed at the
+    source in VeroMass_Aligner v1.11.3 — see its "Cleared stale output..."
+    log line) — this is the second, independent layer: even if a future
+    bug reintroduces sample loss through some OTHER path, this catches it
+    HERE, before any network call, rather than silently committing a
+    truncated matrix the way the original incident did."""
+    if not feature_matrix:
+        return
+    expected = _expected_sample_count(xlsx_path)
+    if expected is None:
+        return
+    actual = len({s for row in feature_matrix.values() for s in row})
+    if actual != expected:
+        raise ValueError(
+            f"Sample count mismatch: aligned_features.xlsx has {actual} sample(s) in its "
+            f"feature matrix, but alignment_log.txt reports {expected} file(s) were processed. "
+            "This usually means the output folder had leftover data from a previous run — "
+            "re-run the alignment into a clean folder and try again."
+        )
 
 
 def build_targeted_features(xlsx_path):
@@ -129,8 +182,10 @@ def build_commit_payload(xlsx_path, mode):
     if mode == "targeted":
         return {"features": build_targeted_features(xlsx_path)}
     if mode == "untargeted":
+        feature_matrix = build_untargeted_feature_matrix(xlsx_path)
+        _check_sample_count(xlsx_path, feature_matrix)
         payload = {
-            "feature_matrix": build_untargeted_feature_matrix(xlsx_path),
+            "feature_matrix": feature_matrix,
             "feature_meta": build_untargeted_feature_meta(xlsx_path),
         }
         chromatograms = build_chromatograms(xlsx_path)
