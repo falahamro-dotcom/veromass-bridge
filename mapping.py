@@ -118,13 +118,17 @@ def build_untargeted_feature_matrix(xlsx_path):
 
 
 def build_untargeted_feature_meta(xlsx_path):
-    """Read the Features sheet -> {feature: {mz, rt}} — this is what makes
-    POST /api/jobs/{id}/annotate possible server-side (see
+    """Read the Features sheet -> {feature: {mz, rt, fragments}} — this is
+    what makes POST /api/jobs/{id}/annotate possible server-side (see
     workbench_routes.py's JobCommit.feature_meta docstring): without it, an
     untargeted job's "compounds" are just row labels with no coordinates to
     match against the library. Feature ids here (Feature_000001, ...) are the
     SAME ones write_feature_table used across Features/Peaks/Intensities, so
-    they line up with build_untargeted_feature_matrix's keys directly."""
+    they line up with build_untargeted_feature_matrix's keys directly.
+
+    fragments is passed through as-is from MS2.Fragments, same convention
+    build_targeted_features already uses for targeted jobs — lets untargeted
+    annotation attach real sample MS2 to its matches too."""
     wb = openpyxl.load_workbook(xlsx_path, read_only=True, data_only=True)
     ws = wb["Features"]
     meta = {}
@@ -133,7 +137,11 @@ def build_untargeted_feature_meta(xlsx_path):
         mz, rt = row.get("m.z"), row.get("RT")
         if mz is None or rt is None:
             continue
-        meta[feature_id] = {"mz": float(mz), "rt": float(rt)}
+        meta[feature_id] = {
+            "mz": float(mz),
+            "rt": float(rt),
+            "fragments": row.get("MS2.Fragments") or None,
+        }
     return meta
 
 
